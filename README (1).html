@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>雨雲レーダー 使い方ガイド</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet"/>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Noto Sans JP',sans-serif;background:#f4f7fb;color:#1a2332;line-height:1.7;}
+  .wrap{max-width:600px;margin:0 auto;padding:32px 20px 60px;}
+  .hero{background:linear-gradient(135deg,#0e78dc,#0095b3);border-radius:18px;padding:28px 24px;color:white;margin-bottom:28px;text-align:center;}
+  .hero-icon{font-size:48px;margin-bottom:10px;}
+  .hero h1{font-size:22px;font-weight:700;margin-bottom:6px;}
+  .hero p{font-size:13px;opacity:0.85;}
+  .section{background:white;border-radius:14px;padding:20px;margin-bottom:16px;box-shadow:0 1px 6px rgba(0,0,0,0.06);}
+  .section-title{font-size:15px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+  .step{display:flex;gap:14px;margin-bottom:16px;align-items:flex-start;}
+  .step:last-child{margin-bottom:0;}
+  .num{width:28px;height:28px;border-radius:50%;background:#0e78dc;color:white;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;}
+  .step-body{flex:1;}
+  .step-title{font-size:14px;font-weight:700;margin-bottom:3px;}
+  .step-desc{font-size:13px;color:#555;line-height:1.6;}
+  .btn-demo{display:inline-flex;align-items:center;gap:6px;background:#f0f4fb;border:1.5px solid #0e78dc22;border-radius:9px;padding:4px 10px;font-size:12px;color:#0e78dc;font-weight:700;margin:4px 0;}
+  .icon-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;}
+  .icon-item{display:flex;align-items:center;gap:6px;font-size:13px;color:#444;}
+  .icon-badge{width:36px;height:36px;border-radius:10px;background:#f0f4fb;border:1px solid #dde5f0;display:flex;align-items:center;justify-content:center;font-size:18px;}
+  .tag{display:inline-block;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:700;margin-right:4px;}
+  .tag.blue{background:#e6f1fb;color:#0e78dc;}
+  .tag.orange{background:#fff3e0;color:#e07b00;}
+  .tag.green{background:#e8f5e9;color:#1a9e3f;}
+  .divider{height:1px;background:#f0f0f0;margin:14px 0;}
+  .note{background:#f8faff;border-left:3px solid #0e78dc;border-radius:0 8px 8px 0;padding:10px 12px;font-size:12px;color:#555;margin-top:10px;}
+  .compass-demo{display:flex;justify-content:center;margin:14px 0;}
+  .cd{width:80px;height:80px;border-radius:50%;border:2px solid #dde5f0;position:relative;display:flex;align-items:center;justify-content:center;font-size:9px;color:#888;}
+  .cd span{position:absolute;}
+  .cd .n{top:4px;left:50%;transform:translateX(-50%);}
+  .cd .s{bottom:4px;left:50%;transform:translateX(-50%);}
+  .cd .e{right:5px;top:50%;transform:translateY(-50%);}
+  .cd .w{left:5px;top:50%;transform:translateY(-50%);}
+  .dot{position:absolute;width:10px;height:10px;border-radius:50%;transform:translate(-50%,-50%);}
+  .dot.me{background:#0e78dc;left:50%;top:50%;box-shadow:0 0 6px rgba(14,120,220,0.5);}
+  .dot.rain{background:#e07b00;box-shadow:0 0 4px rgba(224,123,0,0.5);}
+  .dot.clear{background:#e0e0e0;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <div class="hero-icon">🌧️</div>
+    <h1>雨雲レーダー 使い方ガイド</h1>
+    <p>気象庁の公式データを使ったリアルタイム雨雲アプリ</p>
+  </div>
+
+  <!-- ホーム画面に追加 -->
+  <div class="section">
+    <div class="section-title">📱 まずホーム画面に追加しよう</div>
+    <div class="step">
+      <div class="num">1</div>
+      <div class="step-body">
+        <div class="step-title">Chromeでアプリを開く</div>
+        <div class="step-desc">AndroidのChromeで <strong>https://e4144e4144.github.io/rainradar/</strong> にアクセス</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <div class="step-body">
+        <div class="step-title">ホーム画面に追加</div>
+        <div class="step-desc">右上の「︙」→「ホーム画面に追加」をタップ。アイコンが作られてアプリとして使えるようになります。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 基本の使い方 -->
+  <div class="section">
+    <div class="section-title">🗺️ 基本の使い方</div>
+    <div class="step">
+      <div class="num">1</div>
+      <div class="step-body">
+        <div class="step-title">現在地を取得する</div>
+        <div class="step-desc">画面右下の <span class="btn-demo">📍</span> ボタンをタップ。位置情報の許可を求められたら「許可」を選ぶと、地図が現在地に移動します。</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <div class="step-body">
+        <div class="step-title">雨雲レーダーを見る</div>
+        <div class="step-desc">現在地取得後、自動で気象庁の雨雲レーダーが表示されます。色が濃いほど雨が強い場所です。</div>
+        <div class="note">凡例（左上）の色の意味：水色→弱い雨 / 黄色→中程度 / 赤・紫→強い雨</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">3</div>
+      <div class="step-body">
+        <div class="step-title">時間を動かして見る</div>
+        <div class="step-desc">画面下のタイムライン（時刻バー）をタップすると、その時間の雨雲が表示されます。<br>
+        <span class="tag blue">青いバー</span> 過去の記録　　<span class="tag orange">オレンジのバー</span> 予測</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">4</div>
+      <div class="step-body">
+        <div class="step-title">アニメーション再生</div>
+        <div class="step-desc">▶️ ボタンをタップすると、雨雲の動きをアニメーションで確認できます。<br>「1×」ボタンで再生速度を 1× → 2× → 4× に変更できます。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 雨雲チェック -->
+  <div class="section">
+    <div class="section-title">🔍 雨雲はどこから来る？</div>
+    <div class="step">
+      <div class="num">1</div>
+      <div class="step-body">
+        <div class="step-title">🔍ボタンをタップ</div>
+        <div class="step-desc">現在地取得後に画面右下の <span class="btn-demo">🔍</span> をタップすると、周囲8方向の雨雲を自動解析します。</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <div class="step-body">
+        <div class="step-title">結果が表示される</div>
+        <div class="step-desc">コンパスと一緒に、どの方向から雨雲が近づいているか表示されます。</div>
+        <div class="compass-demo">
+          <div class="cd">
+            <span class="n">北</span><span class="s">南</span>
+            <span class="e">東</span><span class="w">西</span>
+            <div class="dot clear" style="left:50%;top:18%;"></div>
+            <div class="dot rain" style="left:18%;top:50%;"></div>
+            <div class="dot clear" style="left:82%;top:50%;"></div>
+            <div class="dot clear" style="left:50%;top:82%;"></div>
+            <div class="dot me"></div>
+          </div>
+        </div>
+        <div class="icon-row">
+          <div class="icon-item"><div class="icon-badge" style="background:#fff3e0;border-color:#ffcc80;">🟠</div>雨雲あり（オレンジ）</div>
+          <div class="icon-item"><div class="icon-badge">⚪</div>雨雲なし（グレー）</div>
+          <div class="icon-item"><div class="icon-badge" style="background:#e6f1fb;border-color:#90caf9;">🔵</div>現在地（青）</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">3</div>
+      <div class="step-body">
+        <div class="step-title">表示パターン</div>
+        <div class="step-desc">
+          <span class="tag green">☀️ 安全</span> 周囲50km以内に雨雲なし<br>
+          <span class="tag orange">🌧️ 接近</span> 〇〇から雨雲が近づいています<br>
+          <span class="tag blue">☔ 雨中</span> 現在地はすでに雨が降っています
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- データについて -->
+  <div class="section">
+    <div class="section-title">📡 使用データについて</div>
+    <div class="step-desc" style="font-size:13px;color:#555;">
+      このアプリは<strong>気象庁の高解像度降水ナウキャスト</strong>を使用しています。250mメッシュの精密なデータで、5分ごとに更新されます。雨雲チェックの予測には Open-Meteo の気象予報データを利用しています。
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
