@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"/>
+  <meta name="theme-color" content="#f0f4f8"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-title" content="雨雲レーダー"/>
+  <title>雨雲レーダー</title>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root{--blue:#0e78dc;--warn:#e07b00;--danger:#d62b2b;--green:#1a9e3f;--text:#1a2332;--text2:rgba(26,35,50,0.55);--panel:rgba(255,255,255,0.96);--border:rgba(0,0,0,0.1);}
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+    html,body{width:100%;height:100%;overflow:hidden;font-family:'Noto Sans JP',sans-serif;color:var(--text);background:#e8eeea;}
+    #map{position:absolute;inset:0;z-index:0;}
+    .leaflet-control-attribution{font-size:9px!important;background:rgba(255,255,255,0.7)!important;color:rgba(0,0,0,0.4)!important;}
+    .leaflet-control-zoom{display:none!important;}
+    /* 気象庁タイルはズーム3〜10のみ存在。エラータイルを非表示 */
+    .leaflet-tile-error{visibility:hidden!important;opacity:0!important;}
+
+    #topbar{position:absolute;top:0;left:0;right:0;z-index:900;padding:max(env(safe-area-inset-top),12px) 16px 10px;background:linear-gradient(to bottom,rgba(240,244,248,0.97) 70%,transparent);display:flex;align-items:center;gap:10px;}
+    .title-icon{width:30px;height:30px;background:rgba(14,120,220,0.1);border:1px solid rgba(14,120,220,0.25);border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+    .title-icon svg{width:16px;height:16px;}
+    h1{font-size:16px;font-weight:700;flex:1;}
+    #clock{font-family:'DM Mono',monospace;font-size:13px;color:var(--text2);}
+
+    #status-chip{position:absolute;top:62px;left:50%;transform:translateX(-50%);z-index:900;background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;backdrop-filter:blur(10px);white-space:nowrap;transition:opacity 0.4s;}
+    #status-chip.hidden{opacity:0;pointer-events:none;}
+    .chip-dot{width:6px;height:6px;border-radius:50%;background:#aaa;}
+    .chip-dot.blue{background:var(--blue);animation:pulse 1.4s infinite;}
+    .chip-dot.green{background:var(--green);}
+    .chip-dot.red{background:var(--danger);}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+
+    #legend{position:absolute;top:68px;left:12px;z-index:800;background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:7px 10px;backdrop-filter:blur(10px);display:none;}
+    #legend.show{display:block;}
+    .lg-title{font-size:10px;color:var(--text2);margin-bottom:4px;}
+    .lg-bar{width:100px;height:6px;background:linear-gradient(to right,#c8f0ff,#64b4ff,#0064ff,#00c800,#ffd200,#ff6400,#c80000);border-radius:3px;margin-bottom:3px;}
+    .lg-labels{display:flex;justify-content:space-between;font-size:9px;color:var(--text2);font-family:'DM Mono',monospace;}
+
+    #toast{position:absolute;top:68px;left:16px;right:16px;z-index:1000;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px 16px;display:flex;align-items:flex-start;gap:10px;backdrop-filter:blur(16px);transform:translateY(-20px);opacity:0;pointer-events:none;transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1),opacity 0.3s;}
+    #toast.show{transform:translateY(0);opacity:1;pointer-events:auto;}
+    #toast.warn{border-color:var(--warn);}#toast.danger{border-color:var(--danger);}
+    .toast-icon{width:22px;height:22px;flex-shrink:0;margin-top:1px;}
+    #toast-title{font-size:14px;font-weight:700;margin-bottom:2px;}
+    #toast-body{font-size:13px;color:var(--text2);line-height:1.5;}
+
+    #fab-area{position:absolute;right:14px;bottom:120px;display:flex;flex-direction:column;gap:10px;z-index:800;}
+    .fab{width:46px;height:46px;border-radius:13px;background:var(--panel);border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform 0.1s;backdrop-filter:blur(12px);}
+    .fab:active{transform:scale(0.92);}
+    .fab svg{width:22px;height:22px;}
+    .fab.locating{border-color:var(--blue);}
+    .fab.checking{border-color:var(--blue);animation:pulse 1s infinite;}
+
+    /* 雨雲方向カード */
+    #rain-card{
+      position:absolute;top:68px;left:16px;right:16px;z-index:1000;
+      background:var(--panel);border:1px solid var(--border);border-radius:16px;
+      padding:14px 16px;backdrop-filter:blur(16px);
+      transform:translateY(-20px);opacity:0;pointer-events:none;
+      transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1),opacity 0.3s;
+    }
+    #rain-card.show{transform:translateY(0);opacity:1;pointer-events:auto;}
+    #rain-card.warn{border-color:var(--warn);}
+    #rain-card.safe{border-color:var(--green);}
+    #rain-card-header{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+    #rain-card-icon{font-size:20px;}
+    #rain-card-title{font-size:15px;font-weight:700;flex:1;}
+    #rain-card-close{width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,0.06);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text2);}
+    #rain-card-body{font-size:13px;color:var(--text2);line-height:1.7;}
+    #rain-card-body strong{color:var(--text);font-weight:700;}
+
+    /* コンパス */
+    #compass{
+      width:100px;height:100px;margin:12px auto 4px;
+      position:relative;
+    }
+    .compass-ring{
+      width:100%;height:100%;border-radius:50%;
+      border:2px solid var(--border);
+      position:relative;
+      display:flex;align-items:center;justify-content:center;
+    }
+    .compass-dir{
+      position:absolute;font-size:9px;font-weight:700;
+      font-family:'DM Mono',monospace;color:var(--text2);
+    }
+    .compass-dir.n{top:4px;left:50%;transform:translateX(-50%);}
+    .compass-dir.s{bottom:4px;left:50%;transform:translateX(-50%);}
+    .compass-dir.e{right:5px;top:50%;transform:translateY(-50%);}
+    .compass-dir.w{left:5px;top:50%;transform:translateY(-50%);}
+    .compass-dot{
+      position:absolute;width:10px;height:10px;border-radius:50%;
+      transform:translate(-50%,-50%);
+      transition:background 0.3s;
+    }
+    .compass-dot.rain{background:var(--warn);box-shadow:0 0 6px rgba(224,123,0,0.6);}
+    .compass-dot.clear{background:rgba(0,0,0,0.08);}
+    .compass-dot.me{background:var(--blue);width:8px;height:8px;box-shadow:0 0 8px rgba(14,120,220,0.5);}
+    #compass-arrow{
+      position:absolute;width:2px;height:36px;
+      background:linear-gradient(to top,var(--warn),transparent);
+      bottom:50%;left:50%;transform-origin:bottom center;
+      border-radius:2px;
+      display:none;
+    }
+
+    #bottom-panel{position:absolute;bottom:0;left:0;right:0;z-index:900;padding-bottom:max(env(safe-area-inset-bottom),10px);background:linear-gradient(to top,rgba(240,244,248,0.98) 65%,transparent);}
+    #timeline{padding:10px 14px 4px;overflow-x:auto;scrollbar-width:none;}
+    #timeline::-webkit-scrollbar{display:none;}
+    #tl-inner{display:flex;gap:3px;align-items:flex-end;min-width:max-content;}
+    .tslot{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:3px 4px;border-radius:7px;min-width:42px;transition:background 0.15s;}
+    .tslot:active{background:rgba(14,120,220,0.08);}
+    .tbar{width:28px;border-radius:3px 3px 0 0;background:rgba(0,0,0,0.1);}
+    .tslot.past .tbar{background:rgba(14,120,220,0.3);}
+    .tslot.active .tbar{background:var(--blue)!important;}
+    .tslot.forecast .tbar{background:rgba(224,123,0,0.3);}
+    .tslot.forecast.active .tbar{background:var(--warn)!important;}
+    .ttime{font-size:10px;color:var(--text2);font-family:'DM Mono',monospace;}
+    .tslot.active .ttime{color:var(--blue);font-weight:700;}
+    .tslot.forecast.active .ttime{color:var(--warn);}
+
+    #controls{display:flex;align-items:center;gap:8px;padding:4px 14px 6px;}
+    #play-btn{width:40px;height:40px;border-radius:50%;background:var(--blue);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform 0.1s;box-shadow:0 2px 10px rgba(14,120,220,0.3);}
+    #play-btn:active{transform:scale(0.92);}
+    #play-btn svg{width:17px;height:17px;}
+    #speed-btn{height:28px;padding:0 9px;border-radius:7px;background:rgba(0,0,0,0.04);border:1px solid var(--border);color:var(--text2);font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;}
+    #time-display{font-size:13px;font-family:'DM Mono',monospace;color:#0095b3;margin-left:2px;}
+    #source-label{font-size:10px;color:var(--text2);margin-left:auto;}
+
+    .umark-outer{width:18px;height:18px;border-radius:50%;background:rgba(14,120,220,0.18);display:flex;align-items:center;justify-content:center;animation:ring 2s infinite;}
+    .umark-inner{width:10px;height:10px;border-radius:50%;background:var(--blue);border:2px solid white;}
+    @keyframes ring{0%,100%{box-shadow:0 0 0 0 rgba(14,120,220,0.35)}50%{box-shadow:0 0 0 7px rgba(14,120,220,0)}}
+    .spin{animation:spin 1s linear infinite;}
+    @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<div id="topbar">
+  <div class="title-icon">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#0e78dc" stroke-width="2">
+      <path d="M20 17.58A5 5 0 0018 8h-1.26A8 8 0 104 16.25"/>
+      <line x1="8" y1="16" x2="8" y2="21"/><line x1="8" y1="21" x2="6" y2="21"/>
+      <line x1="12" y1="16" x2="12" y2="21"/><line x1="16" y1="16" x2="16" y2="21"/>
+    </svg>
+  </div>
+  <h1>雨雲レーダー</h1>
+  <span id="clock">--:--</span>
+</div>
+<div id="status-chip"><div class="chip-dot" id="chip-dot"></div><span id="chip-text">現在地ボタンをタップ</span></div>
+<div id="legend"><div class="lg-title">降水強度（気象庁）</div><div class="lg-bar"></div><div class="lg-labels"><span>弱</span><span>強</span></div></div>
+<div id="toast">
+  <svg class="toast-icon" id="toast-icon" viewBox="0 0 24 24" fill="none" stroke="#e07b00" stroke-width="2">
+    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </svg>
+  <div><div id="toast-title"></div><div id="toast-body"></div></div>
+</div>
+<div id="rain-card">
+  <div id="rain-card-header">
+    <span id="rain-card-icon">🔍</span>
+    <span id="rain-card-title">解析中...</span>
+    <button id="rain-card-close" onclick="document.getElementById('rain-card').classList.remove('show')">✕</button>
+  </div>
+  <div id="compass">
+    <div class="compass-ring">
+      <span class="compass-dir n">北</span>
+      <span class="compass-dir s">南</span>
+      <span class="compass-dir e">東</span>
+      <span class="compass-dir w">西</span>
+      <div id="compass-arrow"></div>
+      <div class="compass-dot me" style="left:50%;top:50%;"></div>
+    </div>
+  </div>
+  <div id="rain-card-body">--</div>
+</div>
+<div id="fab-area">
+  <button class="fab" id="rain-check-btn" title="雨雲の方向を調べる">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#0e78dc" stroke-width="2">
+      <circle cx="11" cy="11" r="7"/>
+      <path d="M21 21l-4.35-4.35"/>
+      <path d="M11 8v6M8 11h6"/>
+    </svg>
+  </button>
+  <button class="fab" id="locate-btn">
+    <svg id="locate-icon" viewBox="0 0 24 24" fill="none" stroke="#0e78dc" stroke-width="2">
+      <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+    </svg>
+  </button>
+</div>
+<div id="bottom-panel">
+  <div id="timeline"><div id="tl-inner"></div></div>
+  <div id="controls">
+    <button id="play-btn"><svg id="play-icon" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg></button>
+    <button id="speed-btn">1×</button>
+    <span id="time-display">--:--</span>
+    <span id="source-label">気象庁</span>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── 気象庁タイルのエラーを完全無効化 ──────────────────
+// Leafletのエラーハンドラを上書きし、エラータイルを透明にする
+L.TileLayer.include({
+  _tileOnError: function(done, tile, e) {
+    tile.style.display = 'none';
+    done(null, tile);
+  }
+});
+
+let map, radarLayer, locationMarker, accuracyCircle;
+let userLat=null, userLng=null;
+let notifyEnabled=false, notifyInterval=null;
+let frames=[], currentFrameIdx=0;
+let playing=false, playTimer=null, playSpeed=1;
+let toastTimer=null;
+
+// 気象庁タイルURL生成
+// ズームは3〜10のみ有効（それ以上はmaxNativeZoom=10で自動拡大）
+function jmaUrl(basetime, validtime) {
+  return `https://www.jma.go.jp/bosai/jmatile/data/nowc/${basetime}/none/${validtime}/surf/hrpns/{z}/{x}/{y}.png`;
+}
+
+function updateClock(){
+  document.getElementById('clock').textContent=new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
+}
+updateClock(); setInterval(updateClock,15000);
+
+function initMap(lat,lng){
+  if(map){map.setView([lat,lng],10);return;}
+  map=L.map('map',{center:[lat,lng],zoom:10,minZoom:4,maxZoom:14,zoomControl:false,attributionControl:true});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'© OpenStreetMap contributors',maxZoom:19,maxNativeZoom:19
+  }).addTo(map);
+  fetchJMATimeline(lat,lng);
+}
+
+// 気象庁の時刻一覧APIから過去・予測フレームを取得
+async function fetchJMATimeline(lat,lng){
+  try{
+    setChip('blue','レーダーデータ取得中...');
+
+    // 過去（N1）と予測（N2）を並列取得
+    const [r1, r2] = await Promise.all([
+      fetch('https://www.jma.go.jp/bosai/jmatile/data/nowc/targetTimes_N1.json'),
+      fetch('https://www.jma.go.jp/bosai/jmatile/data/nowc/targetTimes_N2.json')
+    ]);
+    const past = await r1.json();   // 降順（新しい順）
+    const forecast = await r2.json(); // basetime固定、validtimeが未来
+
+    frames = [];
+
+    // 過去: 降順なので逆順にして古い順に並べ、直近12コマ
+    const pastSorted = [...past].reverse().slice(-12);
+    pastSorted.forEach(f=>{
+      frames.push({
+        basetime: f.basetime,
+        validtime: f.validtime,
+        isForecast: false,
+        precip: 0,
+        time: parseJMATime(f.validtime)
+      });
+    });
+
+    // 予測: validtimeが未来のもの（60分先まで）
+    const latestBasetime = forecast[0]?.basetime;
+    if(latestBasetime){
+      forecast.forEach(f=>{
+        frames.push({
+          basetime: f.basetime,
+          validtime: f.validtime,
+          isForecast: true,
+          precip: 0,
+          time: parseJMATime(f.validtime)
+        });
+      });
+    }
+
+    // 降水量バー用データ
+    if(lat&&lng){
+      try{
+        const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=precipitation&forecast_days=2&timezone=auto`);
+        const d=await r.json();
+        frames.forEach(f=>{
+          const dt=new Date(f.time);
+          const key=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}T${String(dt.getHours()).padStart(2,'0')}:00`;
+          const i=d.hourly.time.indexOf(key);
+          if(i!==-1)f.precip=d.hourly.precipitation[i]||0;
+        });
+      }catch(e){}
+    }
+
+    buildTimeline();
+    // 現在時刻に一番近い過去フレームを選択
+    setFrame(pastSorted.length - 1);
+    document.getElementById('legend').classList.add('show');
+    setChip('green', '気象庁 高解像度ナウキャスト');
+    setTimeout(()=>document.getElementById('status-chip').classList.add('hidden'), 3000);
+
+  }catch(e){
+    setChip('red','データ取得失敗');
+    console.error(e);
+  }
+}
+
+// 気象庁時刻文字列 "20210227101000" → Dateのタイムスタンプ（ms）
+function parseJMATime(s){
+  const y=s.slice(0,4), mo=s.slice(4,6), d=s.slice(6,8);
+  const h=s.slice(8,10), mi=s.slice(10,12);
+  return new Date(`${y}-${mo}-${d}T${h}:${mi}:00+09:00`).getTime();
+}
+
+function buildTimeline(){
+  const inner=document.getElementById('tl-inner');
+  inner.innerHTML='';
+  const maxP=Math.max(...frames.map(f=>f.precip),0.5);
+  frames.forEach((f,i)=>{
+    const slot=document.createElement('div');
+    slot.className='tslot'+(f.isForecast?' forecast':' past');
+    const d=new Date(f.time);
+    const label=d.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
+    const barH=Math.max(5,Math.round((f.precip/maxP)*30));
+    slot.innerHTML=`<div class="tbar" style="height:${barH}px"></div><div class="ttime">${label}</div>`;
+    slot.addEventListener('click',()=>{setFrame(i);stopPlay();});
+    inner.appendChild(slot);
+  });
+  updateTLActive();
+  scrollToActive();
+}
+
+function updateTLActive(){document.querySelectorAll('.tslot').forEach((el,i)=>el.classList.toggle('active',i===currentFrameIdx));}
+function scrollToActive(){const a=document.querySelector('.tslot.active');if(a)a.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});}
+
+function setFrame(idx){
+  currentFrameIdx=Math.max(0,Math.min(frames.length-1,idx));
+  updateTLActive();
+  renderRadar();
+  updateTimeDisplay();
+}
+
+function updateTimeDisplay(){
+  const f=frames[currentFrameIdx];
+  const lbl=document.getElementById('time-display');
+  if(!f){lbl.textContent='--:--';return;}
+  const d=new Date(f.time);
+  const t=d.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
+  lbl.textContent=f.isForecast?t+' 予測':t;
+  lbl.style.color=f.isForecast?'#e07b00':'#0095b3';
+}
+
+function renderRadar(){
+  if(!map)return;
+  if(radarLayer){map.removeLayer(radarLayer);radarLayer=null;}
+  const f=frames[currentFrameIdx];
+  if(!f)return;
+
+  radarLayer=L.tileLayer(jmaUrl(f.basetime, f.validtime),{
+    opacity:0.75,
+    tileSize:256,
+    // ズーム3〜10のみ存在。11以上はズーム10のタイルを拡大表示
+    maxNativeZoom:10,
+    maxZoom:14,
+    attribution:'気象データ © 気象庁'
+  }).addTo(map);
+}
+
+const SPEEDS=[1,2,4];
+function togglePlay(){playing?stopPlay():startPlay();}
+function startPlay(){
+  playing=true;updatePlayBtn();
+  playTimer=setInterval(()=>{
+    setFrame(currentFrameIdx>=frames.length-1?0:currentFrameIdx+1);
+    scrollToActive();
+  },600/playSpeed);
+}
+function stopPlay(){playing=false;clearInterval(playTimer);updatePlayBtn();}
+function updatePlayBtn(){
+  document.getElementById('play-icon').innerHTML=playing
+    ?'<rect x="5" y="3" width="4" height="18" fill="white"/><rect x="15" y="3" width="4" height="18" fill="white"/>'
+    :'<polygon points="5,3 19,12 5,21" fill="white"/>';
+}
+document.getElementById('play-btn').addEventListener('click',togglePlay);
+document.getElementById('speed-btn').addEventListener('click',()=>{
+  playSpeed=SPEEDS[(SPEEDS.indexOf(playSpeed)+1)%SPEEDS.length];
+  document.getElementById('speed-btn').textContent=playSpeed+'×';
+  if(playing){stopPlay();startPlay();}
+});
+
+document.getElementById('locate-btn').addEventListener('click',locate);
+function locate(){
+  if(!navigator.geolocation){showToast('warn','非対応','位置情報に対応していません');return;}
+  setChip('blue','現在地を取得中...');
+  document.getElementById('locate-btn').classList.add('locating');
+  document.getElementById('locate-icon').classList.add('spin');
+  navigator.geolocation.getCurrentPosition(pos=>{
+    userLat=pos.coords.latitude;userLng=pos.coords.longitude;
+    document.getElementById('locate-btn').classList.remove('locating');
+    document.getElementById('locate-icon').classList.remove('spin');
+    initMap(userLat,userLng);
+    placeMarker(userLat,userLng,pos.coords.accuracy);
+    setChip('green',`${userLat.toFixed(4)}, ${userLng.toFixed(4)}`);
+    setTimeout(()=>document.getElementById('status-chip').classList.add('hidden'),4000);
+  },err=>{
+    document.getElementById('locate-btn').classList.remove('locating');
+    document.getElementById('locate-icon').classList.remove('spin');
+    const msgs={1:'位置情報が拒否されました',2:'取得できません',3:'タイムアウト'};
+    setChip('red',msgs[err.code]||'エラー');
+  },{enableHighAccuracy:true,timeout:12000,maximumAge:60000});
+}
+
+function placeMarker(lat,lng,acc){
+  if(locationMarker){map.removeLayer(locationMarker);map.removeLayer(accuracyCircle);}
+  locationMarker=L.marker([lat,lng],{icon:L.divIcon({
+    className:'',html:'<div class="umark-outer"><div class="umark-inner"></div></div>',
+    iconSize:[18,18],iconAnchor:[9,9]
+  })}).addTo(map);
+  accuracyCircle=L.circle([lat,lng],{radius:acc,color:'#0e78dc',weight:1,opacity:0.3,fillColor:'#0e78dc',fillOpacity:0.05}).addTo(map);
+}
+
+// ── 雨雲方向検出 ──────────────────────────────────
+document.getElementById('rain-check-btn').addEventListener('click', checkRainDirection);
+
+// 8方向の定義（名前・角度・オフセット距離約50km）
+const DIRS = [
+  {name:'北',   angle:0,    dlat: 0.45, dlng: 0},
+  {name:'北東', angle:45,   dlat: 0.32, dlng: 0.45},
+  {name:'東',   angle:90,   dlat: 0,    dlng: 0.65},
+  {name:'南東', angle:135,  dlat:-0.32, dlng: 0.45},
+  {name:'南',   angle:180,  dlat:-0.45, dlng: 0},
+  {name:'南西', angle:225,  dlat:-0.32, dlng:-0.45},
+  {name:'西',   angle:270,  dlat: 0,    dlng:-0.65},
+  {name:'北西', angle:315,  dlat: 0.32, dlng:-0.45},
+];
+
+async function checkRainDirection() {
+  if (!userLat) {
+    showToast('warn', '現在地が未取得', '先に📍ボタンで現在地を取得してください');
+    return;
+  }
+
+  const card = document.getElementById('rain-card');
+  const btn = document.getElementById('rain-check-btn');
+  btn.classList.add('checking');
+  card.className = 'show';
+  document.getElementById('rain-card-icon').textContent = '🔍';
+  document.getElementById('rain-card-title').textContent = '雨雲を解析中...';
+  document.getElementById('rain-card-body').textContent = '周囲8方向のデータを取得しています';
+  document.getElementById('compass-arrow').style.display = 'none';
+
+  // コンパスドットをリセット
+  document.querySelectorAll('.compass-dot:not(.me)').forEach(d=>d.remove());
+
+  try {
+    // 8方向＋現在地の計9地点を並列取得（2時間予測）
+    const points = [
+      {label:'現在地', lat:userLat, lng:userLng},
+      ...DIRS.map(d=>({label:d.name, angle:d.angle, lat:userLat+d.dlat, lng:userLng+d.dlng}))
+    ];
+
+    const results = await Promise.all(points.map(async p => {
+      const r = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${p.lat.toFixed(4)}&longitude=${p.lng.toFixed(4)}&hourly=precipitation&forecast_days=1&timezone=auto`
+      );
+      const d = await r.json();
+      const now = new Date();
+      // 今後1時間以内の最大降水量
+      let max1h = 0, firstRainH = 999;
+      d.hourly.time.forEach((t, i) => {
+        const diff = (new Date(t) - now) / 3600000;
+        if (diff >= 0 && diff <= 1) max1h = Math.max(max1h, d.hourly.precipitation[i]);
+        if (diff >= 0 && diff <= 2 && d.hourly.precipitation[i] > 0.1 && firstRainH === 999) {
+          firstRainH = diff;
+        }
+      });
+      return { ...p, max1h, firstRainH };
+    }));
+
+    btn.classList.remove('checking');
+
+    const here = results[0];
+    const dirs = results.slice(1);
+
+    // コンパスにドットを描画
+    const ring = document.querySelector('.compass-ring');
+    dirs.forEach(d => {
+      const dot = document.createElement('div');
+      dot.className = 'compass-dot ' + (d.max1h > 0.1 ? 'rain' : 'clear');
+      const rad = (d.angle - 90) * Math.PI / 180;
+      const r = 38; // 半径px
+      const x = 50 + Math.cos(rad) * r;
+      const y = 50 + Math.sin(rad) * r;
+      dot.style.left = x + '%';
+      dot.style.top = y + '%';
+      dot.title = d.label;
+      ring.appendChild(dot);
+    });
+
+    // 雨が来る方向を判定
+    const rainDirs = dirs
+      .filter(d => d.max1h > 0.1)
+      .sort((a, b) => a.firstRainH - b.firstRainH);
+
+    const cardEl = document.getElementById('rain-card');
+    const arrow = document.getElementById('compass-arrow');
+
+    if (here.max1h > 1) {
+      // すでに雨
+      cardEl.className = 'show warn';
+      document.getElementById('rain-card-icon').textContent = '☔';
+      document.getElementById('rain-card-title').textContent = 'すでに雨が降っています';
+      document.getElementById('rain-card-body').innerHTML =
+        `現在地の降水量：<strong>約${here.max1h.toFixed(1)}mm/h</strong><br>` +
+        (rainDirs.length > 0 ? `雨雲は<strong>${rainDirs.map(d=>d.label).join('・')}</strong>方向にも広がっています。` : '');
+    } else if (rainDirs.length > 0) {
+      // 雨雲接近
+      const closest = rainDirs[0];
+      const eta = closest.firstRainH < 1 ? `約${Math.round(closest.firstRainH*60)}分以内` : `約${closest.firstRainH.toFixed(1)}時間以内`;
+      const fromDirs = rainDirs.map(d=>d.label).join('・');
+
+      // 矢印を向ける（雨雲が来る方向から）
+      arrow.style.display = 'block';
+      arrow.style.transform = `translateX(-50%) rotate(${closest.angle}deg)`;
+
+      cardEl.className = 'show warn';
+      document.getElementById('rain-card-icon').textContent = '🌧️';
+      document.getElementById('rain-card-title').textContent = `${closest.label}から雨雲が近づいています`;
+      document.getElementById('rain-card-body').innerHTML =
+        `<strong>${fromDirs}</strong>方向に雨雲を検知。<br>` +
+        `<strong>${eta}</strong>に雨が降り始める可能性があります。`;
+    } else {
+      // 雨なし
+      cardEl.className = 'show safe';
+      document.getElementById('rain-card-icon').textContent = '☀️';
+      document.getElementById('rain-card-title').textContent = '周囲に雨雲はありません';
+      document.getElementById('rain-card-body').innerHTML =
+        `現在地および周囲<strong>約50km</strong>以内に、<br>1時間以内の雨雲は検知されませんでした。`;
+    }
+
+  } catch(e) {
+    btn.classList.remove('checking');
+    document.getElementById('rain-card-icon').textContent = '⚠️';
+    document.getElementById('rain-card-title').textContent = 'データ取得失敗';
+    document.getElementById('rain-card-body').textContent = '通信エラーが発生しました。再度お試しください。';
+  }
+}
+
+function setChip(dot,text){
+  document.getElementById('chip-dot').className='chip-dot'+(dot?' '+dot:'');
+  document.getElementById('chip-text').textContent=text;
+  document.getElementById('status-chip').classList.remove('hidden');
+}
+function showToast(type,title,body){
+  const t=document.getElementById('toast');
+  const c={warn:'#e07b00',danger:'#d62b2b',success:'#1a9e3f',info:'#0e78dc'};
+  document.getElementById('toast-icon').setAttribute('stroke',c[type]||'#0e78dc');
+  document.getElementById('toast-title').textContent=title;
+  document.getElementById('toast-body').textContent=body;
+  t.className='show'+(type==='warn'?' warn':type==='danger'?' danger':'');
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),5000);
+}
+document.getElementById('toast').addEventListener('click',()=>document.getElementById('toast').classList.remove('show'));
+
+initMap(35.6812,139.7671);
+</script>
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js')}</script>
+</body>
+</html>
