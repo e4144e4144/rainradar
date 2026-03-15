@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#f0f4f8" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="雨雲レーダー" />
+  <title>雨雲レーダー</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-deep: #f0f4f8;
+      --bg-panel: rgba(255, 255, 255, 0.95);
+      --bg-card: rgba(0,0,0,0.04);
+      --border: rgba(0,0,0,0.12);
+      --border-glow: rgba(14, 120, 220, 0.4);
+      --text-primary: #1a2332;
+      --text-secondary: rgba(26, 35, 50, 0.6);
+      --text-muted: rgba(26, 35, 50, 0.35);
+      --accent-blue: #0e78dc;
+      --accent-cyan: #0095b3;
+      --accent-green: #1a9e3f;
+      --accent-warn: #e07b00;
+      --accent-danger: #d62b2b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: var(--bg-deep);
+      font-family: 'Noto Sans JP', sans-serif;
+      color: var(--text-primary);
+    }
+
+    /* ── MAP ── */
+    #map {
+      position: absolute; inset: 0;
+      z-index: 0;
+    }
+
+    .leaflet-control-attribution {
+      font-size: 9px !important;
+      background: rgba(255,255,255,0.8) !important;
+      color: rgba(0,0,0,0.5) !important;
+    }
+
+    .leaflet-control-zoom a {
+      background: white !important;
+      color: #1a2332 !important;
+      border-color: rgba(0,0,0,0.15) !important;
+    }
+
+    /* ── TOP BAR ── */
+    #topbar {
+      position: absolute; top: 0; left: 0; right: 0;
+      z-index: 900;
+      padding: env(safe-area-inset-top, 12px) 16px 12px;
+      padding-top: max(env(safe-area-inset-top), 12px);
+      background: linear-gradient(to bottom, rgba(240,244,248,0.97), transparent);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    #app-title {
+      display: flex; align-items: center; gap: 8px;
+      flex: 1;
+    }
+
+    .title-icon {
+      width: 32px; height: 32px;
+      background: rgba(14, 120, 220, 0.12);
+      border: 1px solid rgba(14, 120, 220, 0.25);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .title-icon svg { width: 18px; height: 18px; }
+
+    h1 {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: var(--text-primary);
+    }
+
+    #clock {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    /* ── BOTTOM PANEL ── */
+    #bottom-panel {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      z-index: 900;
+      padding-bottom: max(env(safe-area-inset-bottom), 16px);
+      background: linear-gradient(to top, rgba(240,244,248,0.98) 60%, transparent);
+    }
+
+    /* ── TIMELINE ── */
+    #timeline-section {
+      padding: 12px 16px 8px;
+    }
+
+    #timeline-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    #timeline-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-family: 'DM Mono', monospace;
+    }
+
+    #current-time-label {
+      font-size: 12px;
+      font-family: 'DM Mono', monospace;
+      color: var(--accent-cyan);
+    }
+
+    #timeline-track {
+      position: relative;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .tframe {
+      flex: 1;
+      height: 24px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.06);
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .tframe.active {
+      background: rgba(56, 182, 255, 0.25);
+      border-color: rgba(56, 182, 255, 0.5);
+      transform: scaleY(1.15);
+    }
+
+    .tframe.has-rain::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: var(--rain-h, 0%);
+      background: rgba(0, 229, 255, 0.5);
+      border-radius: 0 0 3px 3px;
+    }
+
+    #timeline-scrubber {
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 2px;
+      background: #0e78dc;
+      border-radius: 2px;
+      box-shadow: 0 0 8px rgba(56,182,255,0.8);
+      pointer-events: none;
+      transition: left 0.3s ease;
+      z-index: 2;
+    }
+
+    /* ── PLAYBACK CONTROLS ── */
+    #controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 16px 10px;
+    }
+
+    #play-btn {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      background: #0e78dc;
+      border: none;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: transform 0.1s, background 0.15s;
+      box-shadow: 0 0 20px rgba(56,182,255,0.4);
+    }
+    #play-btn:active { transform: scale(0.92); }
+    #play-btn svg { width: 20px; height: 20px; fill: white; }
+
+    #speed-btn {
+      height: 32px;
+      padding: 0 10px;
+      border-radius: 8px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-family: 'DM Mono', monospace;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    #speed-btn:active { border-color: var(--accent-blue); color: var(--accent-blue); }
+
+    .spacer { flex: 1; }
+
+    #layer-tabs {
+      display: flex;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .ltab {
+      padding: 6px 11px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      color: var(--text-secondary);
+      border: none;
+      background: transparent;
+      transition: background 0.15s, color 0.15s;
+    }
+    .ltab.active {
+      background: rgba(56, 182, 255, 0.18);
+      color: var(--accent-blue);
+    }
+
+    /* ── LOCATE / NOTIFY BUTTONS ── */
+    #fab-area {
+      position: absolute;
+      right: 14px;
+      bottom: 160px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 800;
+    }
+
+    .fab {
+      width: 48px; height: 48px;
+      border-radius: 14px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform 0.1s, border-color 0.2s, background 0.2s;
+      backdrop-filter: blur(12px);
+    }
+    .fab:active { transform: scale(0.92); }
+    .fab svg { width: 22px; height: 22px; }
+    .fab.locating { border-color: var(--accent-blue); }
+    .fab.active-notify { border-color: var(--accent-warn); background: rgba(255,179,0,0.12); }
+
+    /* ── TOAST ── */
+    #toast {
+      position: absolute;
+      top: 80px; left: 16px; right: 16px;
+      z-index: 1000;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      backdrop-filter: blur(16px);
+      transform: translateY(-20px);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s;
+    }
+    #toast.show {
+      transform: translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #toast.rain-warn { border-color: var(--accent-warn); }
+    #toast.rain-alert { border-color: var(--accent-danger); }
+
+    .toast-icon {
+      width: 24px; height: 24px; flex-shrink: 0;
+      margin-top: 1px;
+    }
+    #toast-title {
+      font-size: 14px; font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 2px;
+    }
+    #toast-body {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    /* ── STATUS CHIP ── */
+    #status-chip {
+      position: absolute;
+      top: 72px; left: 50%; transform: translateX(-50%);
+      z-index: 850;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: flex; align-items: center; gap: 6px;
+      backdrop-filter: blur(12px);
+      white-space: nowrap;
+      transition: opacity 0.4s;
+    }
+    #status-chip.hidden { opacity: 0; pointer-events: none; }
+    .chip-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--text-muted);
+    }
+    .chip-dot.blue { background: #0e78dc; animation: pulse 1.4s infinite; }
+    .chip-dot.green { background: var(--accent-green); }
+    .chip-dot.red { background: var(--accent-danger); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* ── LEGEND ── */
+    #legend {
+      position: absolute;
+      top: 80px; left: 14px;
+      z-index: 800;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      backdrop-filter: blur(12px);
+      display: none;
+    }
+    #legend.visible { display: block; }
+    .lg-title { font-size: 10px; color: var(--text-secondary); margin-bottom: 5px; letter-spacing: 0.06em; }
+    .lg-bar {
+      width: 100px; height: 6px;
+      background: linear-gradient(to right, #00ffff, #00ff00, #ffff00, #ff8c00, #ff0000, #9400d3);
+      border-radius: 3px; margin-bottom: 3px;
+    }
+    .lg-labels { display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); font-family: 'DM Mono', monospace; }
+
+    /* ── USER MARKER ── */
+    .user-marker-outer {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: rgba(14, 120, 220, 0.15);
+      display: flex; align-items: center; justify-content: center;
+      animation: ring 2s infinite;
+    }
+    .user-marker-inner {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #0e78dc;
+      border: 2px solid white;
+    }
+    @keyframes ring {
+      0%,100%{box-shadow:0 0 0 0 rgba(56,182,255,0.4)}
+      50%{box-shadow:0 0 0 8px rgba(56,182,255,0)}
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <div id="app-title">
+    <div class="title-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#0e78dc" stroke-width="2">
+        <path d="M20 17.58A5 5 0 0018 8h-1.26A8 8 0 104 16.25"/>
+        <line x1="8" y1="16" x2="8" y2="21"/>
+        <line x1="8" y1="21" x2="6" y2="21"/>
+        <line x1="12" y1="16" x2="12" y2="21"/>
+        <line x1="16" y1="16" x2="16" y2="21"/>
+      </svg>
+    </div>
+    <h1>雨雲レーダー</h1>
+  </div>
+  <span id="clock">--:--</span>
+</div>
+
+<!-- STATUS CHIP -->
+<div id="status-chip">
+  <div class="chip-dot" id="chip-dot"></div>
+  <span id="chip-text">現在地ボタンをタップ</span>
+</div>
+
+<!-- LEGEND -->
+<div id="legend">
+  <div class="lg-title">降水強度</div>
+  <div class="lg-bar"></div>
+  <div class="lg-labels"><span>弱</span><span>強</span></div>
+</div>
+
+<!-- TOAST -->
+<div id="toast">
+  <svg class="toast-icon" id="toast-icon" viewBox="0 0 24 24" fill="none" stroke="#ffb300" stroke-width="2">
+    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/>
+    <line x1="12" y1="17" x2="12.01" y2="17"/>
+  </svg>
+  <div>
+    <div id="toast-title">--</div>
+    <div id="toast-body">--</div>
+  </div>
+</div>
+
+<!-- FAB BUTTONS -->
+<div id="fab-area">
+  <button class="fab" id="notify-btn" title="雨雲通知">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#1a2332" stroke-width="2">
+      <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+      <path d="M13.73 21a2 2 0 01-3.46 0"/>
+    </svg>
+  </button>
+  <button class="fab" id="locate-btn" title="現在地">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#0e78dc" stroke-width="2">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+    </svg>
+  </button>
+</div>
+
+<!-- BOTTOM PANEL -->
+<div id="bottom-panel">
+  <div id="timeline-section">
+    <div id="timeline-header">
+      <span id="timeline-label">雨雲の動き</span>
+      <span id="current-time-label">--:--</span>
+    </div>
+    <div id="timeline-track">
+      <div id="timeline-scrubber"></div>
+    </div>
+  </div>
+
+  <div id="controls">
+    <button id="play-btn">
+      <svg id="play-icon" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21" fill="white"/></svg>
+    </button>
+    <button id="speed-btn">1×</button>
+    <div class="spacer"></div>
+    <div id="layer-tabs">
+      <button class="ltab active" data-layer="rain">雨雲</button>
+      <button class="ltab" data-layer="wind">風</button>
+      <button class="ltab" data-layer="temp">気温</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── STATE ──────────────────────────────────────────
+let map, radarLayer, locationMarker, accuracyCircle;
+let userLat = null, userLng = null;
+let notifyEnabled = false;
+let notifyInterval = null;
+let frames = [];
+let currentFrameIdx = 0;
+let playing = false;
+let playTimer = null;
+let playSpeed = 1;
+let currentLayerType = 'rain';
+let toastTimer = null;
+
+// ── CLOCK ──────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+}
+updateClock();
+setInterval(updateClock, 10000);
+
+// ── INIT MAP ───────────────────────────────────────
+function initMap(lat, lng) {
+  if (map) { map.setView([lat, lng], 11); return; }
+
+  map = L.map('map', {
+    center: [lat, lng], zoom: 11,
+    zoomControl: true,
+    attributionControl: true,
+    maxZoom: 13
+  });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+    maxZoom: 13,
+    maxNativeZoom: 13
+  }).addTo(map);
+
+  fetchAndBuildTimeline();
+}
+
+// ── RAINVIEWER TIMELINE ────────────────────────────
+async function fetchAndBuildTimeline() {
+  try {
+    const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+    const data = await res.json();
+
+    frames = [];
+
+    const past = data.radar.past || [];
+    const nowcast = data.radar.nowcast || [];
+    const allFrames = [...past.slice(-6), ...nowcast.slice(0, 3)];
+
+    allFrames.forEach(f => {
+      frames.push({ time: f.time, path: f.path, isFuture: nowcast.includes(f) });
+    });
+
+    buildTimelineUI();
+    setFrame(frames.length - (nowcast.length > 0 ? nowcast.length : 1));
+    document.getElementById('legend').classList.add('visible');
+  } catch(e) {
+    setChip('red', 'レーダーデータ取得失敗');
+  }
+}
+
+function buildTimelineUI() {
+  const track = document.getElementById('timeline-track');
+  track.innerHTML = '<div id="timeline-scrubber"></div>';
+
+  frames.forEach((f, i) => {
+    const el = document.createElement('div');
+    el.className = 'tframe' + (f.isFuture ? ' future' : '');
+    el.style.setProperty('--rain-h', Math.random() * 60 + 10 + '%');
+    el.classList.add('has-rain');
+    el.addEventListener('click', () => { setFrame(i); stopPlay(); });
+    track.appendChild(el);
+  });
+
+  updateScrubber();
+}
+
+function setFrame(idx) {
+  currentFrameIdx = Math.max(0, Math.min(frames.length - 1, idx));
+  updateScrubber();
+  renderRadarLayer();
+  updateTimeLabel();
+}
+
+function updateScrubber() {
+  const track = document.getElementById('timeline-track');
+  const ftiles = track.querySelectorAll('.tframe');
+  ftiles.forEach((el, i) => el.classList.toggle('active', i === currentFrameIdx));
+
+  const scrubber = document.getElementById('timeline-scrubber');
+  if (ftiles.length === 0) return;
+  const tile = ftiles[currentFrameIdx];
+  const trackRect = track.getBoundingClientRect();
+  const tileRect = tile.getBoundingClientRect();
+  const left = tileRect.left - trackRect.left + tileRect.width / 2;
+  scrubber.style.left = left + 'px';
+}
+
+function updateTimeLabel() {
+  const lbl = document.getElementById('current-time-label');
+  if (!frames[currentFrameIdx]) { lbl.textContent = '--:--'; return; }
+  const d = new Date(frames[currentFrameIdx].time * 1000);
+  const isFuture = frames[currentFrameIdx].isFuture;
+  lbl.textContent = d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) + (isFuture ? ' (予測)' : '');
+  lbl.style.color = isFuture ? '#e07b00' : '#00e5ff';
+}
+
+// ── RADAR LAYER ────────────────────────────────────
+const layerURLs = {
+  rain: (path) => `https://tilecache.rainviewer.com${path}/512/{z}/{x}/{y}/4/1_1.png`,
+  wind: () => 'https://tile.openweathermap.org/map/wind_new/{z}/{x}/{y}.png?appid=demo',
+  temp: () => 'https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=demo',
+};
+
+function renderRadarLayer() {
+  if (!map) return;
+  if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
+  if (!frames.length) return;
+
+  const f = frames[currentFrameIdx];
+  const url = currentLayerType === 'rain'
+    ? layerURLs.rain(f.path)
+    : layerURLs[currentLayerType]();
+
+  radarLayer = L.tileLayer(url, {
+    opacity: 0.75,
+    errorTileUrl: '',
+    crossOrigin: true,
+    maxZoom: 13,
+    maxNativeZoom: 11,
+  }).addTo(map);
+}
+
+// ── PLAYBACK ───────────────────────────────────────
+const SPEEDS = [1, 2, 4];
+const INTERVAL_BASE = 600;
+
+function togglePlay() {
+  playing ? stopPlay() : startPlay();
+}
+
+function startPlay() {
+  playing = true;
+  updatePlayBtn();
+  playTimer = setInterval(() => {
+    if (currentFrameIdx >= frames.length - 1) {
+      setFrame(0);
+    } else {
+      setFrame(currentFrameIdx + 1);
+    }
+  }, INTERVAL_BASE / playSpeed);
+}
+
+function stopPlay() {
+  playing = false;
+  clearInterval(playTimer);
+  updatePlayBtn();
+}
+
+function updatePlayBtn() {
+  const icon = document.getElementById('play-icon');
+  icon.innerHTML = playing
+    ? '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
+    : '<polygon points="5,3 19,12 5,21" fill="white"/>';
+}
+
+document.getElementById('play-btn').addEventListener('click', togglePlay);
+
+document.getElementById('speed-btn').addEventListener('click', () => {
+  const idx = SPEEDS.indexOf(playSpeed);
+  playSpeed = SPEEDS[(idx + 1) % SPEEDS.length];
+  document.getElementById('speed-btn').textContent = playSpeed + '×';
+  if (playing) { stopPlay(); startPlay(); }
+});
+
+// ── LAYER TABS ─────────────────────────────────────
+document.querySelectorAll('.ltab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    currentLayerType = btn.dataset.layer;
+    document.querySelectorAll('.ltab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderRadarLayer();
+  });
+});
+
+// ── LOCATE ─────────────────────────────────────────
+document.getElementById('locate-btn').addEventListener('click', locate);
+
+function locate() {
+  if (!navigator.geolocation) {
+    showToast('warn', '非対応', 'このブラウザは位置情報に対応していません');
+    return;
+  }
+  setChip('blue', '現在地を取得中...');
+  document.getElementById('locate-btn').classList.add('locating');
+
+  navigator.geolocation.getCurrentPosition(pos => {
+    userLat = pos.coords.latitude;
+    userLng = pos.coords.longitude;
+    document.getElementById('locate-btn').classList.remove('locating');
+
+    initMap(userLat, userLng);
+    placeUserMarker(userLat, userLng, pos.coords.accuracy);
+    setChip('green', `${userLat.toFixed(4)}, ${userLng.toFixed(4)}`);
+    setTimeout(() => setChip('', ''), 4000);
+  }, err => {
+    document.getElementById('locate-btn').classList.remove('locating');
+    const msgs = { 1:'位置情報が拒否されました', 2:'位置情報を取得できません', 3:'タイムアウトしました' };
+    setChip('red', msgs[err.code] || 'エラー');
+  }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
+}
+
+function placeUserMarker(lat, lng, acc) {
+  if (locationMarker) { map.removeLayer(locationMarker); map.removeLayer(accuracyCircle); }
+  const icon = L.divIcon({
+    className: '',
+    html: '<div class="user-marker-outer"><div class="user-marker-inner"></div></div>',
+    iconSize: [20, 20], iconAnchor: [10, 10]
+  });
+  locationMarker = L.marker([lat, lng], { icon }).addTo(map);
+  accuracyCircle = L.circle([lat, lng], {
+    radius: acc, color: '#0e78dc', weight: 1,
+    opacity: 0.3, fillColor: '#0e78dc', fillOpacity: 0.05
+  }).addTo(map);
+}
+
+// ── NOTIFY ─────────────────────────────────────────
+document.getElementById('notify-btn').addEventListener('click', toggleNotify);
+
+function toggleNotify() {
+  if (notifyEnabled) {
+    notifyEnabled = false;
+    clearInterval(notifyInterval);
+    document.getElementById('notify-btn').classList.remove('active-notify');
+    document.getElementById('notify-btn').querySelector('svg').setAttribute('stroke', '#1a2332');
+    showToast('info', '通知オフ', '雨雲接近アラートを無効にしました');
+    return;
+  }
+
+  if (!userLat) {
+    showToast('warn', '先に現在地を取得', '📍ボタンで現在地を取得してください');
+    return;
+  }
+
+  Notification.requestPermission().then(perm => {
+    if (perm === 'granted' || true) {
+      notifyEnabled = true;
+      document.getElementById('notify-btn').classList.add('active-notify');
+      document.getElementById('notify-btn').querySelector('svg').setAttribute('stroke', '#e07b00');
+      showToast('success', '通知オン', '雨雲が近づいたらアラートします');
+      startRainMonitor();
+    }
+  });
+}
+
+function startRainMonitor() {
+  checkRainNearby();
+  notifyInterval = setInterval(checkRainNearby, 3 * 60 * 1000);
+}
+
+async function checkRainNearby() {
+  if (!notifyEnabled || !userLat) return;
+  try {
+    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${userLat}&longitude=${userLng}&hourly=precipitation&forecast_days=1&timezone=auto`);
+    const data = await res.json();
+    const now = new Date();
+    const hourlyTimes = data.hourly.time;
+    const hourlyPrecip = data.hourly.precipitation;
+
+    let nearRain = false;
+    let maxPrecip = 0;
+    for (let i = 0; i < hourlyTimes.length; i++) {
+      const t = new Date(hourlyTimes[i]);
+      const diffHours = (t - now) / 3600000;
+      if (diffHours >= 0 && diffHours <= 2) {
+        if (hourlyPrecip[i] > 0.2) nearRain = true;
+        maxPrecip = Math.max(maxPrecip, hourlyPrecip[i]);
+      }
+    }
+
+    if (nearRain) {
+      const intensity = maxPrecip > 5 ? '強い雨' : maxPrecip > 1 ? '雨' : '小雨';
+      triggerRainAlert(intensity, maxPrecip);
+    }
+  } catch(e) {
+    console.warn('Rain check failed', e);
+  }
+}
+
+function triggerRainAlert(intensity, mm) {
+  const isStrong = mm > 5;
+  showToast(
+    isStrong ? 'danger' : 'warn',
+    `☔ ${intensity}が近づいています`,
+    `2時間以内に約${mm.toFixed(1)}mm/hの降水が予想されます`
+  );
+
+  if (Notification.permission === 'granted') {
+    new Notification('雨雲レーダー', {
+      body: `${intensity}が近づいています（${mm.toFixed(1)}mm/h予想）`,
+      icon: 'icons/icon-192.png'
+    });
+  }
+}
+
+// ── STATUS CHIP ────────────────────────────────────
+function setChip(dotState, text) {
+  const dot = document.getElementById('chip-dot');
+  const txt = document.getElementById('chip-text');
+  dot.className = 'chip-dot' + (dotState ? ' ' + dotState : '');
+  txt.textContent = text;
+  const chip = document.getElementById('status-chip');
+  chip.classList.toggle('hidden', !text);
+}
+
+// ── TOAST ──────────────────────────────────────────
+function showToast(type, title, body) {
+  const toast = document.getElementById('toast');
+  const icon = document.getElementById('toast-icon');
+  document.getElementById('toast-title').textContent = title;
+  document.getElementById('toast-body').textContent = body;
+
+  toast.className = '';
+  const colors = { warn: '#e07b00', danger: '#d62b2b', success: '#1a9e3f', info: '#0e78dc' };
+  icon.setAttribute('stroke', colors[type] || '#0e78dc');
+  toast.classList.add('show');
+  if (type === 'warn') toast.classList.add('rain-warn');
+  if (type === 'danger') toast.classList.add('rain-alert');
+
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 5000);
+}
+
+toast.addEventListener('click', () => toast.classList.remove('show'));
+
+// ── INIT ───────────────────────────────────────────
+initMap(35.6812, 139.7671);
+setChip('', '現在地ボタンをタップ');
+document.getElementById('status-chip').classList.remove('hidden');
+</script>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("/sw.js")}</script>
+</body>
+</html>
